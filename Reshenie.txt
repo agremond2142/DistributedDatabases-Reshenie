@@ -1,0 +1,183 @@
+//Start
+
+//1. Create database fedex_5534
+
+CREATE DATABASE fedex_5534
+
+
+
+//2. Create Tables
+
+
+CREATE TABLE Income (
+  id_priliv numeric IDENTITY(1,1) PRIMARY KEY,
+  priliv TEXT(100),
+  opis TEXT(255)
+);
+
+CREATE TABLE Income_Type (
+  id_tip_trosok numeric IDENTITY(1,1) PRIMARY KEY,
+  tip_trosok TEXT(50)
+);
+
+CREATE TABLE Income_Month (
+  id_PRILIV_MESEC numeric IDENTITY(1,1) PRIMARY KEY,
+  p_id_priliv numeric,
+  iznos float,
+  mesec numeric,
+  godina numeric
+);
+
+CREATE TABLE Expense (
+  id_trosok NUMERIC IDENTITY(1,1),
+  TROSOK TEXT(100),
+  opis TEXT(255),
+  tip_trosok NUMERIC
+);
+
+CREATE TABLE Expense_Month (
+  ID_TROSOK_MESEC NUMERIC IDENTITY(1,1),
+  T_ID_TROSOK NUMERIC,
+  mesec NUMERIC,
+  IZNOS FLOAT,
+  godina NUMERIC
+);
+
+
+//3. Create realtions for tables
+
+
+ALTER TABLE Income
+ADD CONSTRAINT FK_Income_IncomeType
+FOREIGN KEY (id_tip_trosok)
+REFERENCES Income_Type(id_tip_trosok);
+
+ALTER TABLE Income_Month
+ADD CONSTRAINT FK_Income_Month_Income
+FOREIGN KEY (p_id_priliv)
+REFERENCES Income(id_priliv);
+
+ALTER TABLE Expense_Month
+ADD CONSTRAINT FK_Expense_Month_Expense
+FOREIGN KEY (T_ID_TROSOK)
+REFERENCES Expense(id_trosok);
+
+
+//4. Create Table STAT
+
+CREATE TABLE STAT (
+    ID_STAT NUMERIC PRIMARY KEY IDENTITY(1,1),
+    OPIS_STAT TEXT(500),
+    DATUM_STAT DATETIME
+);
+
+//5. Create trigger
+
+CREATE TRIGGER tr_insert_expense
+AFTER INSERT ON Expense_Month
+FOR EACH ROW
+BEGIN
+    INSERT INTO STAT (OPIS_STAT, DATUM_STAT)
+    VALUES (
+        CONCAT('Inserted expense with ID=', NEW.ID_TROSOK_MESEC, ', amount ', NEW.IZNOS, ' for ', NEW.mesec, '.', NEW.godina),
+        NOW()
+    );
+END;
+
+//6. Create procedure
+
+CREATE PROCEDURE sp_GetIncomesAndExpensesForMonthYear
+    @month numeric,
+    @year numeric
+AS
+BEGIN
+    SELECT 'INCOME' as Type, priliv as Name, opis as Description, im.iznos as Amount
+    FROM Income i
+    INNER JOIN Income_Month im ON i.id_priliv = im.p_id_priliv
+    WHERE im.mesec = @month AND im.godina = @year
+    
+    UNION ALL
+    
+    SELECT 'EXPENSE' as Type, trosok as Name, opis as Description, em.iznos as Amount
+    FROM Expense e
+    INNER JOIN Expense_Month em ON e.id_trosok = em.T_ID_TROSOK
+    WHERE em.mesec = @month AND em.godina = @year
+END;
+
+//7. Call procedure
+
+EXEC sp_GetIncomesAndExpensesForMonthYear @month = {}, @year = {};
+
+//8. Create view which will return the all the data and for each expense it’s type and amount.
+
+CREATE VIEW vw_AllDataWithExpenseTypeAndAmount
+AS
+SELECT 'INCOME' AS Type, i.priliv AS Name, im.iznos AS Amount, NULL AS Trosok, NULL AS Opis
+FROM Income i
+INNER JOIN Income_Month im ON i.id_priliv = im.p_id_priliv
+
+UNION ALL
+
+SELECT 'EXPENSE' AS Type, e.trosok AS Name, em.iznos AS Amount, et.tip_trosok AS Trosok, e.opis AS Opis
+FROM Expense e
+INNER JOIN Expense_Month em ON e.id_trosok = em.T_ID_TROSOK
+INNER JOIN Income i ON i.id_priliv = em.p_id_priliv
+INNER JOIN Income_Type et ON e.tip_trosok = et.id_tip_trosok;
+
+SELECT * FROM vw_AllDataWithExpenseTypeAndAmount;
+
+//9. Create full data base Script file
+
+USE [fedex_5534];
+GO
+
+<-- Script tables -->
+SELECT * INTO #temp_tables FROM sys.objects WHERE type_desc = 'USER_TABLE' ORDER BY name;
+DECLARE @table_name sysname;
+WHILE EXISTS(SELECT TOP 1 * FROM #temp_tables)
+BEGIN
+    SELECT TOP 1 @table_name = name FROM #temp_tables;
+    SELECT OBJECT_DEFINITION(OBJECT_ID(@table_name)) AS 'Script for ' + @table_name;
+    DELETE FROM #temp_tables WHERE name = @table_name;
+END
+
+<-- Script procedures -->
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.procedures
+WHERE type_desc = 'SQL_STORED_PROCEDURE'
+ORDER BY name;
+
+<-- Script triggers -->
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.triggers
+WHERE parent_class_desc = 'OBJECT_OR_COLUMN' AND type_desc = 'SQL_TRIGGER'
+ORDER BY name;
+
+<-- Script views -->
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.views
+WHERE type_desc = 'VIEW'
+ORDER BY name;
+
+<-- Script constraints -->
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.check_constraints
+UNION ALL
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.default_constraints
+UNION ALL
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.foreign_keys
+UNION ALL
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.primary_keys
+UNION ALL
+SELECT OBJECT_DEFINITION(OBJECT_ID(name)) AS 'Script for ' + name
+FROM sys.unique_constraints
+ORDER BY name;
+
+GO
+
+
+//End
+
